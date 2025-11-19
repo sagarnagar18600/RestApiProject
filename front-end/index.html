@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Store Manager</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Store Manager</h1>
+
+  <section>
+    <h2>Create Store</h2>
+    <input type="text" id="storeName" placeholder="Store Name">
+    <button onclick="createStore()">Add Store</button>
+  </section>
+
+  <section>
+    <h2>Stores</h2>
+    <ul id="storeList"></ul>
+  </section>
+
+  <section>
+    <h2>Add Item</h2>
+    <input type="text" id="itemName" placeholder="Item Name">
+    <input type="number" id="itemPrice" placeholder="Price">
+    <input type="text" id="itemStoreId" placeholder="Store ID">
+    <button onclick="addItem()">Add Item</button>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>
