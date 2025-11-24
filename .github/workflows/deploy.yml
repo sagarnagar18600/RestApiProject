@@ -21,49 +21,47 @@ jobs:
           script_stop: true
           command_timeout: 60m
           script: |
-            # Avoid -e because the ssh wrapper aborts on non-zero from conditionals.
-            # Keep -u and -o pipefail for safety, and -x for verbosity.
+            # Use strict but avoid -e because the SSH action wrapper aborts on non-zero in conditionals.
             set -xuo pipefail
 
             echo "==> Ensure Docker and git installed"
-            if ! command -v docker >/dev/null 2>&1; then
+            command -v docker >/dev/null 2>&1 || {
               sudo apt-get update
               sudo apt-get install -y docker.io
               sudo systemctl enable docker
               sudo systemctl start docker
-            fi
-            if ! command -v git >/dev/null 2>&1; then
+            }
+            command -v git >/dev/null 2>&1 || {
               sudo apt-get update
               sudo apt-get install -y git
-            fi
+            }
 
             echo "==> Prepare app directory and source"
             APP_DIR="/home/${USER}/app"
             REPO_URL="https://github.com/sagarnagar18600/RestApiProject.git"
             BRANCH="feature/prod"
 
-            # Idempotent directory creation
             mkdir -p "$APP_DIR"
             cd "$APP_DIR"
 
-            # If repo not present, clone; else update
-            if [ ! -d ".git" ]; then
-              git clone "$REPO_URL" .
-            else
-              git remote set-url origin "$REPO_URL" || true
-              git fetch --all --prune
-            fi
+            # Idempotent repo setup: init, set remote, fetch, checkout branch tracking remote
+            git init
+            # Reset 'origin' remote to the desired URL
+            git remote remove origin >/dev/null 2>&1 || true
+            git remote add origin "$REPO_URL" >/dev/null 2>&1 || true
 
-            echo "==> Checkout branch: ${BRANCH}"
-            git checkout "${BRANCH}" || git checkout -b "${BRANCH}"
-            git pull --rebase origin "${BRANCH}" || true
+            # Fetch latest from origin
+            git fetch --depth=1 origin "$BRANCH"
+
+            # Create/overwrite local branch to track remote branch
+            git checkout -B "$BRANCH" "origin/$BRANCH"
 
             echo "==> Build Docker image"
             sudo docker build --pull -t flaskapp:latest .
 
             echo "==> Restart container if exists"
-            sudo docker stop flaskapp || true
-            sudo docker rm flaskapp || true
+            sudo docker stop flaskapp >/dev/null 2>&1 || true
+            sudo docker rm flaskapp >/dev/null 2>&1 || true
 
             echo "==> Run container on port 80 -> 8000 (no JWT secret env)"
             sudo docker run -d --name flaskapp \
