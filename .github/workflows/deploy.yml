@@ -36,12 +36,12 @@ jobs:
             fi
 
             echo "==> Stop and disable Nginx (free port 80)"
-            if systemctl list-unit-files | grep -q '^nginx.service'; then
+            if systemctl status nginx >/dev/null 2>&1; then
               sudo systemctl stop nginx || true
               sudo systemctl disable nginx || true
-              sudo systemctl status nginx || true
+              echo "Nginx stopped and disabled."
             else
-              echo "Nginx service not found; skipping stop/disable."
+              echo "Nginx not running or not installed."
             fi
 
             echo "==> Verify port 80 is free"
@@ -76,7 +76,7 @@ jobs:
             sudo docker stop flaskapp || true
             sudo docker rm flaskapp || true
 
-            echo "==> Run container on port 80 -> 8000 (no JWT secret env)"
+            echo "==> Run container on port 80 -> 8000"
             sudo docker run -d --name flaskapp \
               --restart unless-stopped \
               -p 80:8000 \
