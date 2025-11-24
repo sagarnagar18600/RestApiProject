@@ -35,24 +35,6 @@ jobs:
               sudo apt-get install -y git
             fi
 
-            echo "==> Stop and disable Nginx (free port 80)"
-            # Safely check if nginx is active without failing the script
-            NGINX_STATUS="$(sudo systemctl is-active nginx || true)"
-            if [ "$NGINX_STATUS" = "active" ]; then
-              echo "Nginx is active. Stopping and disabling..."
-              sudo systemctl stop nginx || true
-              sudo systemctl disable nginx || true
-            else
-              echo "Nginx is not active (status: $NGINX_STATUS). Continuing..."
-            fi
-
-            echo "==> Verify port 80 is free"
-            if sudo ss -tulpn | grep -qE 'LISTEN.*:80'; then
-              echo "ERROR: Port 80 still in use by:"
-              sudo ss -tulpn | grep -E 'LISTEN.*:80' || true
-              exit 1
-            fi
-
             echo "==> Prepare app directory"
             APP_DIR="/home/${USER}/app"
             REPO_URL="https://github.com/sagarnagar18600/RestApiProject.git"
@@ -75,11 +57,19 @@ jobs:
             echo "==> Build Docker image"
             sudo docker build --pull -t flaskapp:latest .
 
-            echo "==> Restart container"
+            echo "==> Restart container if exists"
             sudo docker stop flaskapp || true
             sudo docker rm flaskapp || true
 
-            echo "==> Run container on port 80 -> 8000 (no JWT secret env)"
+            echo "==> Quick check: is VM port 80 free?"
+            # This is informational only; will NOT modify services.
+            if sudo ss -tulpn | grep -qE 'LISTEN.*:80'; then
+              echo "WARNING: Port 80 appears in use. The next docker run may fail to bind."
+              sudo ss -tulpn | grep -E 'LISTEN.*:80' || true
+            fi
+
+            echo "==> Run container on port 80 -> 8000"
+            # If port 80 is busy, this will fail; that's intentional per your request.
             sudo docker run -d --name flaskapp \
               --restart unless-stopped \
               -p 80:8000 \
