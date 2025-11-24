@@ -3,6 +3,7 @@ from flask_smorest import Api
 from flask_jwt_extended import JWTManager
 from datetime import timedelta
 import os
+from urllib.parse import quote_plus
 
 from db import db
 from blocklist import BLOCKLIST
@@ -11,6 +12,17 @@ from resources.user import blp as UserBlueprint
 from resources.item import blp as ItemBlueprint
 from resources.store import blp as StoreBlueprint
 from resources.tag import blp as TagBlueprint
+
+# --- wherever you set SQLALCHEMY_DATABASE_URI before, replace with: ---
+
+
+def _sqlalchemy_uri_from_env() -> str:
+    db_conn = os.getenv("DATABASE_URL", "").strip()
+    if not db_conn:
+        raise RuntimeError("DATABASE_URL is not set")
+    if db_conn.lower().startswith("mssql+pyodbc://"):
+        return db_conn
+    return "mssql+pyodbc:///?odbc_connect={}".format(quote_plus(db_conn))
 
 
 def create_app(db_url=None):
@@ -24,7 +36,10 @@ def create_app(db_url=None):
     app.config[
         "OPENAPI_SWAGGER_UI_URL"
     ] = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
-    app.config["SQLALCHEMY_DATABASE_URI"] = db_url or "sqlite:///data.db"
+   
+
+# In your app factory or initialization code:
+    app.config["SQLALCHEMY_DATABASE_URI"] = _sqlalchemy_uri_from_env()
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["PROPAGATE_EXCEPTIONS"] = True
     

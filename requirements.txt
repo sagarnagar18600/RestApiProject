@@ -6,3 +6,7 @@ sqlalchemy
 flask-sqlalchemy
 flask-jwt-extended
 passlib
+gunicorn
+pyodbc
+# optional for token-based auth later:
+# azure-identity

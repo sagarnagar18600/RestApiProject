@@ -1,0 +1,66 @@
+# .github/workflows/deploy.yml
+
+name: Deploy to Azure VM
+
+on:
+  push:
+    branches: [ "feature/prod" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (CI side)
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -e
+
+            # Ensure Docker & git on the VM
+            if ! command -v docker >/dev/null 2>&1; then
+              sudo apt-get update && sudo apt-get install -y docker.io
+              sudo systemctl enable docker && sudo systemctl start docker
+            fi
+            if ! command -v git >/dev/null 2>&1; then
+              sudo apt-get update && sudo apt-get install -y git
+            fi
+
+            # Pull latest code to /home/${USER}/app
+            if [ ! -d "/home/${USER}/app" ]; then
+              mkdir -p /home/${USER}/app
+              cd /home/${USER}/app
+              git clone https://github.com/sagarnagar18600/RestApiProject.git .
+            else
+              cd /home/${USER}/app
+              git remote set-url origin https://github.com/sagarnagar18600/RestApiProject.git
+              git fetch --all --prune
+            fi
+
+            # Checkout the deployment branch
+            git checkout feature/prod
+            git pull origin feature/prod
+
+            echo "Building Docker image..."
+            sudo docker build -t flaskapp:latest .
+
+            echo "Restarting container..."
+            sudo docker stop flaskapp || true
+            sudo docker rm flaskapp || true
+
+            # Publish container port 5000 to VM port 80
+            sudo docker run -d --name flaskapp \
+              --restart unless-stopped \
+              -p 80:8000 \
+              -e DATABASE_URL="${{ secrets.DB_CONN }}" \
+              -e FLASK_ENV=production \
+              flaskapp:latest
+
+            echo "Deployment complete."
