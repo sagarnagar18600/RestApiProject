@@ -21,7 +21,9 @@ jobs:
           script_stop: true
           command_timeout: 60m
           script: |
-            set -euxo pipefail
+            # Avoid -e because the ssh wrapper aborts on non-zero from conditionals.
+            # Keep -u and -o pipefail for safety, and -x for verbosity.
+            set -xuo pipefail
 
             echo "==> Ensure Docker and git installed"
             if ! command -v docker >/dev/null 2>&1; then
@@ -35,24 +37,26 @@ jobs:
               sudo apt-get install -y git
             fi
 
-            echo "==> Prepare app directory"
+            echo "==> Prepare app directory and source"
             APP_DIR="/home/${USER}/app"
             REPO_URL="https://github.com/sagarnagar18600/RestApiProject.git"
             BRANCH="feature/prod"
 
-            if [ ! -d "$APP_DIR" ]; then
-              mkdir -p "$APP_DIR"
-              cd "$APP_DIR"
+            # Idempotent directory creation
+            mkdir -p "$APP_DIR"
+            cd "$APP_DIR"
+
+            # If repo not present, clone; else update
+            if [ ! -d ".git" ]; then
               git clone "$REPO_URL" .
             else
-              cd "$APP_DIR"
-              git remote set-url origin "$REPO_URL"
+              git remote set-url origin "$REPO_URL" || true
               git fetch --all --prune
             fi
 
             echo "==> Checkout branch: ${BRANCH}"
-            git checkout "${BRANCH}"
-            git pull origin "${BRANCH}"
+            git checkout "${BRANCH}" || git checkout -b "${BRANCH}"
+            git pull --rebase origin "${BRANCH}" || true
 
             echo "==> Build Docker image"
             sudo docker build --pull -t flaskapp:latest .
@@ -61,15 +65,7 @@ jobs:
             sudo docker stop flaskapp || true
             sudo docker rm flaskapp || true
 
-            echo "==> Quick check: is VM port 80 free?"
-            # This is informational only; will NOT modify services.
-            if sudo ss -tulpn | grep -qE 'LISTEN.*:80'; then
-              echo "WARNING: Port 80 appears in use. The next docker run may fail to bind."
-              sudo ss -tulpn | grep -E 'LISTEN.*:80' || true
-            fi
-
-            echo "==> Run container on port 80 -> 8000"
-            # If port 80 is busy, this will fail; that's intentional per your request.
+            echo "==> Run container on port 80 -> 8000 (no JWT secret env)"
             sudo docker run -d --name flaskapp \
               --restart unless-stopped \
               -p 80:8000 \
