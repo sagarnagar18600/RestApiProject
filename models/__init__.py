@@ -1,5 +1,11 @@
-from models.item import ItemModel
-from models.store import StoreModel
-from models.tag import TagModel
-from models.item_tags import ItemsTags
-from models.user import UserModel
+
+# models/__init__.py
+from db import db
+
+from .item import ItemModel
+from .tag import TagModel
+from .item_tags import ItemTag     # ← file: itemtags.py, class: ItemTag
+from .store import StoreModel
+from .user import UserModel
+
+__all__ = ["ItemModel", "TagModel", "ItemTag", "StoreModel", "UserModel"]

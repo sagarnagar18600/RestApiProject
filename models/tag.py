@@ -12,7 +12,6 @@ class TagModel(db.Model):
     store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=False)
     store    = db.relationship("StoreModel", back_populates="tags")
 
-    # Association object counterpart
     tag_items = db.relationship(
         "ItemTag",
         back_populates="tag",
