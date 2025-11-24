@@ -2,6 +2,7 @@ from flask import Flask, jsonify
 from flask_smorest import Api
 from flask_jwt_extended import JWTManager
 from datetime import timedelta
+from flask_migrate import Migrate
 import os
 from urllib.parse import quote_plus
 
@@ -53,6 +54,13 @@ def create_app(db_url=None):
 
     db.init_app(app)
     api = Api(app)
+    Migrate(app, db)
+
+    
+    @app.get("/health")
+    def health():
+      return jsonify({"status": "ok"}), 200
+
 
    
     app.config["JWT_SECRET_KEY"] = "e3f1c4a7b2d9f8c6a1e0d3b4c5a6f7e8d9c0b1a2f3e4d5c6b7a8e9f0d1c2b3"
@@ -123,10 +131,7 @@ def create_app(db_url=None):
 
     # JWT configuration ends
 
-    with app.app_context():
-        import models  # noqa: F401
-
-        db.create_all()
+   
 
     api.register_blueprint(UserBlueprint)
     api.register_blueprint(ItemBlueprint)
