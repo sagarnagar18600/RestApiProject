@@ -1,10 +1,8 @@
-# .github/workflows/deploy.yml
-
 name: Deploy to Azure VM
 
 on:
   push:
-    branches: [ "feature/prod" ]
+    branches: ["feature/prod"]
 
 jobs:
   deploy:
@@ -21,41 +19,64 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script_stop: true
+          command_timeout: 60m
           script: |
-            set -e
+            set -euxo pipefail
 
-            # Ensure Docker & git on the VM
+            echo "==> Ensure Docker and git installed"
             if ! command -v docker >/dev/null 2>&1; then
-              sudo apt-get update && sudo apt-get install -y docker.io
-              sudo systemctl enable docker && sudo systemctl start docker
+              sudo apt-get update
+              sudo apt-get install -y docker.io
+              sudo systemctl enable docker
+              sudo systemctl start docker
             fi
             if ! command -v git >/dev/null 2>&1; then
-              sudo apt-get update && sudo apt-get install -y git
+              sudo apt-get update
+              sudo apt-get install -y git
             fi
 
-            # Pull latest code to /home/${USER}/app
-            if [ ! -d "/home/${USER}/app" ]; then
-              mkdir -p /home/${USER}/app
-              cd /home/${USER}/app
-              git clone https://github.com/sagarnagar18600/RestApiProject.git .
+            echo "==> Stop and disable Nginx (free port 80)"
+            if systemctl list-unit-files | grep -q '^nginx.service'; then
+              sudo systemctl stop nginx || true
+              sudo systemctl disable nginx || true
+              sudo systemctl status nginx || true
             else
-              cd /home/${USER}/app
-              git remote set-url origin https://github.com/sagarnagar18600/RestApiProject.git
+              echo "Nginx service not found; skipping stop/disable."
+            fi
+
+            echo "==> Verify port 80 is free"
+            if sudo lsof -i :80; then
+              echo "ERROR: Port 80 still in use."
+              exit 1
+            fi
+
+            echo "==> Prepare app directory"
+            APP_DIR="/home/${USER}/app"
+            REPO_URL="https://github.com/sagarnagar18600/RestApiProject.git"
+            BRANCH="feature/prod"
+
+            if [ ! -d "$APP_DIR" ]; then
+              mkdir -p "$APP_DIR"
+              cd "$APP_DIR"
+              git clone "$REPO_URL" .
+            else
+              cd "$APP_DIR"
+              git remote set-url origin "$REPO_URL"
               git fetch --all --prune
             fi
 
-            # Checkout the deployment branch
-            git checkout feature/prod
-            git pull origin feature/prod
+            echo "==> Checkout branch: ${BRANCH}"
+            git checkout "${BRANCH}"
+            git pull origin "${BRANCH}"
 
-            echo "Building Docker image..."
-            sudo docker build -t flaskapp:latest .
+            echo "==> Build Docker image"
+            sudo docker build --pull -t flaskapp:latest .
 
-            echo "Restarting container..."
+            echo "==> Restart container"
             sudo docker stop flaskapp || true
             sudo docker rm flaskapp || true
 
-            # Publish container port 5000 to VM port 80
+            echo "==> Run container on port 80 -> 8000 (no JWT secret env)"
             sudo docker run -d --name flaskapp \
               --restart unless-stopped \
               -p 80:8000 \
@@ -63,4 +84,11 @@ jobs:
               -e FLASK_ENV=production \
               flaskapp:latest
 
-            echo "Deployment complete."
+            echo "==> Check container status"
+            sudo docker ps --format "table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}\t{{.Names}}"
+
+            echo "==> Tail container logs (short)"
+            sleep 3
+            sudo docker logs --tail=100 flaskapp || true
+
+            echo "==> Deployment complete."
